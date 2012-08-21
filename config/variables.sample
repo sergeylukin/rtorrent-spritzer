@@ -1,0 +1,35 @@
+base_dir="{{VAR_BASE_DIR}}"
+
+# Directory where all the configuration files exist
+config_dir="$base_dir/config"
+
+# Directory from where file are being seeded
+seeding_dir="$base_dir/downloads/seeding"
+
+# Directory where completed downloads are placed
+completed_dir="$base_dir/downloads/completed"
+
+# Directory for logs and sessions data
+system_dir="$base_dir/system"
+
+# Directory where user places their torrents
+queue_dir="$base_dir/torrents/queue"
+
+# Directory where rtorrent is watching for downloads
+watch_download_dir="$base_dir/torrents/to_download"
+
+# Directory where rtorrent is watching for seeds
+watch_seed_dir="$base_dir/torrents/to_seed"
+
+
+
+
+# log file for this script
+logfile="$system_dir/logs/queue.log"
+
+# where the configuration file is
+rtorrent_conf="$config_dir/rtorrent.rc"
+
+# number of active downloads
+max_downloads=1;
+

@@ -1,0 +1,83 @@
+###############
+#   GENERAL    
+###############
+# Global upload and download rate in KiB. "0" for unlimited.
+upload_rate = 15
+download_rate = 0
+
+# Port range to use for listening.
+port_range = 49164-49164
+
+
+###############
+#   FOLDERS    
+###############
+# Default directory to save the downloaded torrents.
+directory = {{VAR_DOWNLOADING_DIR}}
+
+# All rTorrent session data is kept in this directory
+session = {{VAR_SESSION_DIR}}
+
+
+###############
+#   SEEDING    
+###############
+# Enable the default ratio group.
+ratio.enable=
+
+# Stop torrents when reaching upload ratio 10 percent
+ratio.max.set=10
+
+
+###############
+#   EVENTS    
+###############
+# Move file to seeding folder when download is finished
+system.method.set_key = event.download.finished, move_file_to_seed, "d.set_directory=$d.get_custom1= ;execute=mv,-n,$d.get_base_path=,$d.get_custom1="
+
+# Move torrent file to watch_seed folder when download is finished
+# By doing so we actually remove current item and create another one
+# where $d.get_custom1= is the destination folder, which will be used
+# when seeding ratio will be reached
+system.method.set_key = event.download.finished, move_torrent_to_seed, "execute=mv,-n,$d.get_tied_to_file=,$d.get_custom2="
+
+# Erase item when seeding ratio is reached and torrent is 100% downloaded
+# This will trigger event.download.erased event
+system.method.set = group.seeding.ratio.command, d.close=, d.erase=
+
+# When item is erased (manually or by seeding ratio limit):
+# - execute `move_to_completed` method if torrent was 100% downloaded
+# - execute `clean_temp_data` method if torrent was not 100% downloaded
+system.method.set_key = event.download.erased, erase_item, "branch=d.get_complete=,move_to_completed=,clean_temp_data="
+
+
+###############
+#   METHODS
+###############
+# Method to move file to destination folder
+system.method.insert = move_to_completed, simple, "execute=mv,-n,$d.get_base_path=,$d.get_custom1="
+
+# Method to clean temp files when download is cancelled
+system.method.insert = clean_temp_data, simple, "execute=rm,-fr,$d.get_base_path="
+
+###############
+#   WATCH    
+###############
+# start item when torrent file tied
+# NOTE: no need in this but I think
+# that maybe when it's missing rtorrent
+# sometimes doesn't grab torrents in watch
+# directories
+# later on planned to remove this line if
+# problem with watch directory will remain
+schedule = tied_directory,10,10,start_tied=
+
+# completely remove item if torrent file has been deleted
+schedule = untied_directory,10,10,remove_untied=
+
+# stop when diskspace is too low
+schedule = low_diskspace,5,60,close_low_diskspace=100M
+
+# Watch directories with destination paths
+schedule = watch_directory_1,5,5,"load_start=~/downloads/torrents/torrents/to_download/*.torrent,d.set_custom1=/home/sergey/downloads/torrents/downloads/seeding/,d.set_custom2=/home/sergey/downloads/torrents/torrents/to_seed/"
+schedule = watch_directory_2,10,10,"load_start=~/downloads/torrents/torrents/to_seed/*.torrent,d.set_custom1=/home/sergey/downloads/torrents/downloads/completed/,d.set_directory=/home/sergey/downloads/torrents/downloads/seeding/"

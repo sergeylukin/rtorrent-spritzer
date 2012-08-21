@@ -1,0 +1,209 @@
+#!/bin/bash
+#
+#       rtorator.sh
+#       
+#       Copyright 2012 Sergey Lukin <contact@sergeylukin.com>
+#       2012/08/05
+#
+#   Description:
+#   This script checks the queue directory and active concurrent download of
+#   rtorrent. The concept here is to to move torrents from the queuing
+#   directory to the watch directory, so that the total number of concurrent
+#   downloads is lower or equal to the specified value.
+#   
+#   The user no longer manage multiple directories for rtorrent download and
+#   move the completed tasks from one directory to another. User only need to
+#   manage the queue directory and the base directory in this script.
+#
+#   eg. when /directory_to/queue/TV/lost and lost_xxx.torrent are created/added.
+#   The script will create a "/directory_to/watch/TV/lost" directory under
+#   watch directory and copy the torrent file to it. Also create the "lost"
+#   directory under base directory "TV" (this points to where the location of
+#   the shared folder). Thus, rtorrent will store the data to
+#   /directory_to/shared_folder/TV/lost/lost_xxx.avi
+#
+#   Features:
+#   * Limit the number of concurrent active downloads in rtorrent
+#   * Create a new watch.directory scheduler as new folder+torrent in queue
+#      directory found and set its destination directory in rtorrent.rc
+#   * Create destination and watch sub folder as appropriated folder+torrent
+#      are found in queue directory
+#   
+
+# Load settings
+source ../config/variables
+
+# create log file if it doesn't exist
+if ! [ -e $logfile ]; then
+  touch $logfile
+fi
+
+
+# Start new line with date in log file
+echo "" >> $logfile
+date >> $logfile
+
+
+# get total torrents in Queue
+total_pending=`find $queue_dir/. -type f | wc -l | awk '{print $1}'`;
+# get total active torrents
+total_active=`find $watch_download_dir/. -type f | wc -l | awk '{print $1}'`;
+   
+# check if there is torrent for download
+if [ $total_pending -ge 1 ]; then
+  # make sure active download session is less than maximum download
+  if [ $total_active -lt $max_downloads ]; then
+     total_available=$(($max_downloads-$total_active))
+     
+     # in case we have less pending torrents than available
+     if [ $total_pending -lt $total_available ]; then
+        total_available=$total_pending;
+     fi
+
+     echo "Good news! We can download more files" >> $logfile
+     
+     # insert
+     i=0;
+     until [ $i -eq $total_available ]
+     do
+
+        # get next (oldest file) torrent in queue
+        torrent=`find $queue_dir -type f -name "*.torrent" -exec ls -1rt "{}" + | head -1 | sed 's/\ /\\ /g'`;
+
+          # extract torrent Filename and Subdir
+          torrent_relative_path=${torrent#*$queue_dir}
+          torrent_filename=$(basename $torrent_relative_path)
+          torrent_subdir=$(dirname $torrent_relative_path)
+          if [ $torrent_subdir = "/" ]; then
+            torrent_subdir=""
+          fi
+
+          # generate destination paths
+          torrent_watch_file="${watch_download_dir}$torrent_relative_path"
+
+          torrent_watch_dir="${watch_download_dir}${torrent_subdir}"
+          torrent_watch_seed_dir="${watch_seed_dir}${torrent_subdir}"
+          torrent_seeding_dir="${seeding_dir}${torrent_subdir}"
+          torrent_completed_dir="${completed_dir}${torrent_subdir}"
+        
+              # create structure in watch folder
+              if ! [ -e $torrent_watch_dir ]; then
+                 echo "Creating dir $torrent_watch_dir"  >> $logfile
+                 mkdir -p $torrent_watch_dir
+                 
+                  # Get next watch directory ID
+                  # This number will be used in name of watch_directory_#
+                  # in config file
+                  let watch_number=1
+                  while read NUMBER; do
+                    if (( NUMBER > watch_number )); then
+                      watch_number=$(( NUMBER ))
+                    fi
+                  done < <(grep -o 'watch_directory_.' $rtorrent_conf | sed -e 's/watch_directory_//')
+                  (( watch_number++ ))
+
+                # add a schedule watch folder in rtorrent.rc
+                echo "schedule = watch_directory_$watch_number,5,5,\"load_start=$torrent_watch_dir/*.torrent,d.set_custom1=${torrent_seeding_dir}/,d.set_custom2=${torrent_watch_seed_dir}/\"" >> $rtorrent_conf
+
+                # increase the watch number
+                (( watch_number++ ))
+
+                # add a schedule watch seed folder in rtorrent.rc
+                echo "schedule = watch_directory_$watch_number,10,10,\"load_start=$torrent_watch_seed_dir/*.torrent,d.set_custom1=${torrent_completed_dir}/,d.set_directory=${torrent_seeding_dir}/\"" >> $rtorrent_conf
+
+              fi
+
+              # create structure in watch seed folder
+              if ! [ -e ${torrent_watch_seed_dir} ]; then
+                mkdir -p ${torrent_watch_seed_dir}
+                echo "Creating ${torrent_watch_seed_dir} for rtorrent scheduler" >> $logfile
+              fi
+
+              # create structure in seeding folder
+              if ! [ -e ${torrent_seeding_dir} ]; then
+                mkdir -p ${torrent_seeding_dir}
+                echo "Creating ${torrent_seeding_dir} for rtorrent scheduler" >> $logfile
+              fi
+
+              # create structure in completed folder
+              if ! [ -e ${torrent_completed_dir} ]; then
+                mkdir -p ${torrent_completed_dir}
+                echo "Creating ${torrent_completed_dir} for rtorrent scheduler" >> $logfile
+              fi
+
+              echo "Moving $torrent to watch folder" >> $logfile
+        
+              if cp -f $torrent $torrent_watch_file ; then
+                 rm -f $torrent
+                 # increase counter only if we succeeded to move torrent from queue
+                 i=$(( $i + 1 ));
+              else
+                 echo "unable to move torrent file $torrent to watch folder"  >> $logfile
+              fi
+     done
+  else
+    echo "Already reached maximum concurrent downloads, sorry" >> $logfile
+  fi
+else
+  echo "You've no downloads in queue" >> $logfile
+fi
+
+
+
+
+####
+## Check if any torrents are being seeded for too long
+## and if yes move them to completed
+####
+find $watch_seed_dir -type f -name "*.torrent" | while read f
+do
+  # extract the Filename from the PATH
+  filename=$(basename "$f")
+  # extract the interval (1day, 2week, 5hour, etc.) part of the filename
+  interval_noun=$(echo $filename | sed 's/^.*\.\([^\.]*\)\.torrent$/\1/')
+  # get the Number part of interval
+  interval_int=$(echo $interval_noun | sed 's/^\([[:digit:]]*\).*$/\1/')
+  # If number is empty - set 1
+  if [ -z "$interval_int" ]; then
+    interval_int=2
+  fi
+  # get the noun part of interval (day, month, hour etc.)
+  period=$(echo $interval_noun | sed 's/^[[:digit:]]*\(.*\)$/\1/')
+  case "$period" in
+    "second")
+      interval_time=$(($interval_int))
+      ;;
+    "minute")
+      interval_time=$((60*$interval_int))
+      ;;
+    "hour")
+      interval_time=$((60*60*$interval_int))
+      ;;
+    "day")
+      interval_time=$((60*60*24*$interval_int))
+      ;;
+    "week")
+      interval_time=$((60*60*24*7*$interval_int))
+      ;;
+    "month")
+      interval_time=$((60*60*24*30*$interval_int))
+      ;;
+    "year")
+      interval_time=$((60*60*24*360*$interval_int))
+      ;;
+    *)
+      interval_time=$((60*60*24*7*$interval_int))
+      ;;
+  esac
+
+  filename_modified=`stat -f %m $f`
+  current_time=`date +%s`
+  diff=$(($current_time - $filename_modified))
+  
+  #echo "Torrent $filename was created $diff seconds ago (interval for deletion $interval_time)"
+  if [ $interval_time -lt $diff ]; then
+    echo Deleting $filename
+    rm -f $f
+  fi
+
+done
