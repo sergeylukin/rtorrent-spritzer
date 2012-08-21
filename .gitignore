@@ -1,0 +1,25 @@
+# ignore rtorrent session data files
+system/session/*
+
+# ignore all downloaded files
+downloads/completed/*
+downloads/downloading/*
+downloads/seeding/*
+
+# ignore all torrents files
+torrents/queue/*
+torrents/to_download/*
+torrents/to_seed/*
+
+# ignore configuration files
+config/*
+# ..except for sample configuration files
+!config/*.sample
+
+# exclude .gitkeep files to keep structure
+!.gitkeep
+
+# ignore log files
+*.log
+# ignore VIM temp files
+*.swp
