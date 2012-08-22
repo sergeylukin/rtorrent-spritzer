@@ -45,9 +45,9 @@ date >> $logfile
 
 
 # get total torrents in Queue
-total_pending=`find $queue_dir/. -type f | wc -l | awk '{print $1}'`;
+total_pending=`find $queue_dir/. -type f -name "*.torrent" | wc -l | awk '{print $1}'`;
 # get total active torrents
-total_active=`find $watch_download_dir/. -type f | wc -l | awk '{print $1}'`;
+total_active=`find $watch_download_dir/. -type f -name "*.torrent" | wc -l | awk '{print $1}'`;
    
 # check if there is torrent for download
 if [ $total_pending -ge 1 ]; then
