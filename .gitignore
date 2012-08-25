@@ -3,7 +3,7 @@ system/session/*
 
 # ignore all downloaded files
 downloads/completed/*
-downloads/downloading/*
+downloads/leeching/*
 downloads/seeding/*
 
 # ignore all torrents files
