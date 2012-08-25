@@ -1,0 +1,10 @@
+. ./variables
+
+# Shortcut to finished torrents
+alias completed="cd $base_dir/downloads/completed && tree -L 2" 
+
+# Shortcut to seeded torrents
+alias seeding="cd $base_dir/downloads/seeding && tree -L 2" 
+
+# Shortcut to leeched torrents
+alias leeching="cd $base_dir/downloads/leeching" 
