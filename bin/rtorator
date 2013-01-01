@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/local/bin/zsh
 #
 #       rtorator.sh
 #       
@@ -31,7 +31,7 @@
 #   
 
 # Load settings
-source ../config/variables
+. ../config/variables
 
 # create log file if it doesn't exist
 if ! [ -e $logfile ]; then
